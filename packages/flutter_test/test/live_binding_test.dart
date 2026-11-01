@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -312,6 +313,57 @@ void main() {
     // Verify that root layer has been replaced
     expect(binding.renderView.debugLayer, isNot(same(currentRootLayer)));
   });
+
+  testWidgets(
+    'A pump called between skipped handleBeginFrame and handleDrawFrame draws a frame and does not hang subsequent pumps',
+    (WidgetTester tester) async {
+      // Regression test for https://github.com/flutter/flutter/issues/194352
+      var buildCount = 0;
+      await tester.pumpWidget(
+        Builder(
+          builder: (BuildContext context) {
+            buildCount++;
+            return const Placeholder();
+          },
+        ),
+      );
+      expect(buildCount, 1);
+
+      // Schedule a frame without expecting a frame, so that LiveTestWidgetsFlutterBinding
+      // skips handleBeginFrame.
+      final FrameCallback originalOnBeginFrame = tester.binding.platformDispatcher.onBeginFrame!;
+      final resumed = Completer<void>();
+      tester.binding.platformDispatcher.onBeginFrame = (Duration timeStamp) {
+        originalOnBeginFrame(timeStamp);
+        // If the frame was skipped, schedulerPhase remains idle.
+        if (tester.binding.schedulerPhase == SchedulerPhase.idle && !resumed.isCompleted) {
+          tester.binding.platformDispatcher.onBeginFrame = originalOnBeginFrame;
+          scheduleMicrotask(resumed.complete);
+        }
+      };
+      tester.binding.platformDispatcher.scheduleFrame();
+
+      await resumed.future;
+      // At this moment, we are in a microtask between handleBeginFrame (which skipped
+      // the frame) and handleDrawFrame.
+      // Call pump: this pump must not complete until a frame is actually drawn.
+      var frameDrawn = false;
+      tester.binding.addPostFrameCallback((_) {
+        frameDrawn = true;
+      });
+
+      await tester.pump();
+      expect(frameDrawn, isTrue);
+
+      // Verify that subsequent pumps do not hang.
+      var subsequentFrameDrawn = false;
+      tester.binding.addPostFrameCallback((_) {
+        subsequentFrameDrawn = true;
+      });
+      await tester.pump().timeout(const Duration(seconds: 2));
+      expect(subsequentFrameDrawn, isTrue);
+    },
+  );
 }
 
 /// A widget that shows the number of times it has been tapped.

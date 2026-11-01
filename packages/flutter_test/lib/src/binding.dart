@@ -3037,18 +3037,26 @@ class LiveTestWidgetsFlutterBinding extends TestWidgetsFlutterBinding {
     if (_drawFrame == _HandleDrawFrame.reset) {
       throw StateError('handleDrawFrame() called without paired handleBeginFrame()');
     }
-    if (_drawFrame == _HandleDrawFrame.drawFrame) {
+    final drewFrame = _drawFrame == _HandleDrawFrame.drawFrame;
+    if (drewFrame) {
       super.handleDrawFrame();
+      _viewNeedsPaint = false;
+      _expectingFrameToReassemble = false;
     }
     _drawFrame = _HandleDrawFrame.reset;
-    _viewNeedsPaint = false;
-    _expectingFrameToReassemble = false;
     if (_expectingFrame) {
-      // set during pump
-      assert(_pendingFrame != null);
-      _pendingFrame!.complete(); // unlocks the test API
-      _pendingFrame = null;
-      _expectingFrame = false;
+      if (drewFrame) {
+        // set during pump
+        assert(_pendingFrame != null);
+        _pendingFrame!.complete(); // unlocks the test API
+        _pendingFrame = null;
+        _expectingFrame = false;
+      } else if (framePolicy != LiveTestWidgetsFlutterBindingFramePolicy.benchmark) {
+        // A pump was requested after handleBeginFrame decided to skip this
+        // frame. Ensure a frame is scheduled with the engine so that the
+        // expected frame actually occurs.
+        platformDispatcher.scheduleFrame();
+      }
     } else if (framePolicy != LiveTestWidgetsFlutterBindingFramePolicy.benchmark) {
       platformDispatcher.scheduleFrame();
     }
