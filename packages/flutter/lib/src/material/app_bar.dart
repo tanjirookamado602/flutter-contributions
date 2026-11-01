@@ -1364,8 +1364,9 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
     );
     final double visibleToolbarHeight = visibleMainHeight - _bottomHeight - extraToolbarHeight;
 
-    final bool isScrolledUnder =
-        overlapsContent || forceElevated || (pinned && shrinkOffset > maxExtent - minExtent);
+    final bool hasScrolledUnder =
+        overlapsContent || (pinned && shrinkOffset > maxExtent - minExtent);
+    final bool isScrolledUnder = hasScrolledUnder || (forceElevated && elevation == null);
     final bool isPinnedWithOpacityFade =
         pinned && floating && bottom != null && extraToolbarHeight == 0.0;
     final double toolbarOpacity = !accessibleNavigation && (!pinned || isPinnedWithOpacityFade)
@@ -1399,8 +1400,8 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
             ? Semantics(header: true, child: flexibleSpace)
             : flexibleSpace,
         bottom: bottom,
-        elevation: isScrolledUnder ? elevation : 0.0,
-        scrolledUnderElevation: scrolledUnderElevation,
+        elevation: (hasScrolledUnder || forceElevated) ? elevation : 0.0,
+        scrolledUnderElevation: scrolledUnderElevation ?? elevation,
         shadowColor: shadowColor,
         surfaceTintColor: surfaceTintColor,
         backgroundColor: backgroundColor,
