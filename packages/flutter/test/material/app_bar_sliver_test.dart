@@ -1515,6 +1515,86 @@ void main() {
       await tester.pumpWidget(buildSliverAppBar(true, elevation: 8.0, themeElevation: 12.0));
       expect(getMaterial().elevation, 8.0);
     });
+
+    testWidgets('Respects elevation and scrolledUnderElevation when forceElevated is true', (
+      WidgetTester tester,
+    ) async {
+      // Regression test for https://github.com/flutter/flutter/issues/162872.
+      Material getMaterial() => tester.widget<Material>(
+        find.descendant(of: find.byType(SliverAppBar), matching: find.byType(Material)).first,
+      );
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      Widget buildWidget({
+        required bool forceElevated,
+        double? elevation,
+        double? scrolledUnderElevation,
+      }) {
+        return MaterialApp(
+          home: Scaffold(
+            body: CustomScrollView(
+              controller: controller,
+              slivers: <Widget>[
+                SliverAppBar(
+                  title: const Text('Title'),
+                  pinned: true,
+                  forceElevated: forceElevated,
+                  elevation: elevation,
+                  scrolledUnderElevation: scrolledUnderElevation,
+                ),
+                SliverToBoxAdapter(child: Container(height: 1200.0, color: Colors.orange)),
+              ],
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(
+        buildWidget(forceElevated: true, elevation: 1.0, scrolledUnderElevation: 20.0),
+      );
+      // When at rest and forceElevated is true, elevation is used rather than scrolledUnderElevation.
+      expect(getMaterial().elevation, 1.0);
+
+      // Scroll so content is scrolled under the pinned SliverAppBar.
+      controller.jumpTo(200.0);
+      await tester.pumpAndSettle();
+      expect(getMaterial().elevation, 20.0);
+    });
+
+    testWidgets('Respects elevation when scrolledUnderElevation is not provided', (
+      WidgetTester tester,
+    ) async {
+      // Regression test for https://github.com/flutter/flutter/issues/162872.
+      Material getMaterial() => tester.widget<Material>(
+        find.descendant(of: find.byType(SliverAppBar), matching: find.byType(Material)).first,
+      );
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      Widget buildWidget({double? elevation}) {
+        return MaterialApp(
+          home: Scaffold(
+            body: CustomScrollView(
+              controller: controller,
+              slivers: <Widget>[
+                SliverAppBar(title: const Text('Title'), pinned: true, elevation: elevation),
+                SliverToBoxAdapter(child: Container(height: 1200.0, color: Colors.orange)),
+              ],
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(buildWidget(elevation: 10.0));
+      expect(getMaterial().elevation, 0.0);
+
+      // Scroll so content is scrolled under the pinned SliverAppBar.
+      controller.jumpTo(200.0);
+      await tester.pumpAndSettle();
+      // Should use the specified elevation (10.0) rather than falling back to M3 default scrolledUnderElevation (3.0).
+      expect(getMaterial().elevation, 10.0);
+    });
   });
 
   group('SliverAppBar.forceMaterialTransparency', () {
